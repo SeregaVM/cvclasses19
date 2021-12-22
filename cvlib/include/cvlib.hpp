@@ -88,11 +88,13 @@ union pixel_circle_mask
         uint16_t p16 :1;
     };
 };
+
 /// \brief FAST corner detection algorithm
 class corner_detector_fast : public cv::Feature2D
 {
+    // detector
     pixel_circle_mask pix_mask;
-    int16_t threshold = 20;
+    int16_t threshold = 100;
     int8_t circle_pix_x[16] = {0, 1, 2, 3, 3, 3, 2, 1, 0, -1, -2, -3, -3, -3, -2, -1};
     int8_t circle_pix_y[16] = {3, 3, 2, 1, 0, -1, -2, -3, -3, -3, -2, -1, 0, 1, 2, 3};
     uint8_t stride = 3;
@@ -104,7 +106,19 @@ class corner_detector_fast : public cv::Feature2D
 
     void fill_full_mask(int row, int col);
 
+    // descriptor
+    int8_t griid_size = 3;
+    int8_t mean_area_size = 3;
+    uint16_t num_pairs = 0;
+    std::vector<std::pair<cv::Point2i, cv::Point2i>> pattern_pairs;
+
+    void create_pattern_pairs();
+    float calc_mean_area(cv::Point2i point);
+
+
     public:
+
+    corner_detector_fast();
     /// \brief Fabrique method for creating FAST detector
     static cv::Ptr<corner_detector_fast> create();
 

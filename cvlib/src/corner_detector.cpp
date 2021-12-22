@@ -15,6 +15,12 @@ cv::Ptr<corner_detector_fast> corner_detector_fast::create()
 {
     return cv::makePtr<corner_detector_fast>();
 }
+
+corner_detector_fast::corner_detector_fast()
+{
+    create_pattern_pairs();
+}
+
 void corner_detector_fast::fill_full_mask(int row, int col)
 {
     int16_t center = img.at<int16_t>(row, col);   
@@ -37,7 +43,10 @@ void corner_detector_fast::detect(cv::InputArray image, CV_OUT std::vector<cv::K
     keypoints.clear();
     // \todo implement FAST with minimal LOCs(lines of code), but keep code readable.
 
-    img = image.getMat();
+    cv::cvtColor(image.getMat(), img, cv::COLOR_BGR2GRAY);
+    cv::GaussianBlur(img, img, cv::Size(3,3), 0.1, 0.1);
+    img.convertTo(img, CV_16SC1);
+    
     int16_t center = 0;
     uint16_t mask9 = 511;
 
@@ -56,14 +65,16 @@ void corner_detector_fast::detect(cv::InputArray image, CV_OUT std::vector<cv::K
                 (pix_mask.mask & mask_p5_9_13) == mask_p5_9_13    )
             {
                 fill_full_mask(j, i);
-                for (int8_t k = 0; k < 15; k++){
+                for (int k = 0; k < 15; k++)
+                {
                     if(pix_mask.mask & mask9 == mask9)
                     {
-                        keypoints.emplace_back(i, j, 1);
+                        keypoints.emplace_back(i, j, 3 * 2 + 1, 0, 0, 0, 3);
                         mask9 = 511;
                         break;
                     }
-                    mask9 << 1;
+                    mask9 <<= 1;
+                     
                     if(k >= 7) mask9++;
                 }
             }
@@ -72,21 +83,59 @@ void corner_detector_fast::detect(cv::InputArray image, CV_OUT std::vector<cv::K
 
 }
 
-void corner_detector_fast::compute(cv::InputArray, std::vector<cv::KeyPoint>& keypoints, cv::OutputArray descriptors)
+void corner_detector_fast::create_pattern_pairs()
 {
-    std::srand(unsigned(std::time(0))); // \todo remove me
+    num_pairs = griid_size * griid_size * (griid_size * griid_size - 1) * 0.5;
+    pattern_pairs.reserve(num_pairs);
+
+    int center = griid_size / 2;
+    cv::Point2i p1, p2;
+
+    std::vector<cv::Point2i> all_point;
+    for(int i = 0; i < griid_size; i++)
+        for(int j = 0; j < griid_size; j++)
+                all_point.emplace_back((i - center)*mean_area_size, (j - center)*mean_area_size);
+    
+    for(int i = 0; i < griid_size*griid_size - 1; i++)
+        for(int j = i+1; j < griid_size*griid_size ; j++)
+            pattern_pairs.emplace_back(all_point[i], all_point[j]); 
+}
+
+float corner_detector_fast::calc_mean_area(cv::Point2i point)
+{
+    float ret = 0, coef = 1.0/(mean_area_size*mean_area_size);
+
+    int center = mean_area_size/2;
+    for(int i = 0; i < mean_area_size; i++)
+        for(int j = 0; j < mean_area_size; j++)
+            ret += static_cast<float>(img.at<int16_t>(point.y + (i - center), point.x  + (j - center))) * coef;
+    return ret;
+}
+
+void corner_detector_fast::compute(cv::InputArray image, std::vector<cv::KeyPoint>& keypoints, cv::OutputArray descriptors)
+{
+    //std::srand(unsigned(std::time(0))); // \todo remove me
     // \todo implement any binary descriptor
-    const int desc_length = 2;
-    descriptors.create(static_cast<int>(keypoints.size()), desc_length, CV_32S);
+    cv::cvtColor(image.getMat(), img, cv::COLOR_BGR2GRAY);
+    cv::GaussianBlur(img, img, cv::Size(3,3), 0.1, 0.1);
+    img.convertTo(img, CV_16SC1);
+
+    descriptors.create(static_cast<int>(keypoints.size()), num_pairs, CV_8U);
     auto desc_mat = descriptors.getMat();
     desc_mat.setTo(0);
 
-    int* ptr = reinterpret_cast<int*>(desc_mat.ptr());
+    float mean1 = 0, mean2 = 0;
+    uint8_t* ptr = reinterpret_cast<uint8_t*>(desc_mat.ptr());
     for (const auto& pt : keypoints)
     {
-        for (int i = 0; i < desc_length; ++i)
+        for (int i = 0; i < num_pairs; ++i)
         {
-            *ptr = std::rand();
+            mean1 = calc_mean_area(pattern_pairs[i].first);
+            mean2 = calc_mean_area(pattern_pairs[i].second);
+            if(mean1 > mean2)
+                *ptr = 1;
+            else 
+                *ptr = 0;
             ++ptr;
         }
     }

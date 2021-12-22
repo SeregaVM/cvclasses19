@@ -21,6 +21,8 @@ int demo_feature_descriptor(int argc, char* argv[])
     cv::namedWindow(main_wnd);
     cv::namedWindow(demo_wnd);
 
+	std::ostringstream convert;
+
     cv::Mat frame;
     auto detector_a = cvlib::corner_detector_fast::create();
     auto detector_b = cv::KAZE::create();
@@ -34,11 +36,15 @@ int demo_feature_descriptor(int argc, char* argv[])
         cap >> frame;
         cv::imshow(main_wnd, frame);
 
-        detector_b->detect(frame, corners); // \todo use your detector (detector_b)
+        detector_a->detect(frame, corners); // \todo use your detector (detector_b)
+        //std::cout << corners[0].angle << " " << corners[0].class_id << " " << corners[0].octave << " " << corners[0].response << " " << corners[0].size << std::endl;
         cv::drawKeypoints(frame, corners, frame, cv::Scalar(0, 0, 255));
 
         utils::put_fps_text(frame, fps);
         // \todo add count of the detected corners at the top left corner of the image. Use green text color.
+        convert.str("");
+		convert << corners.size() << " corners were found";
+		cv::putText(frame, convert.str().c_str(), cv::Point( 10, 25 ), cv::FONT_HERSHEY_SIMPLEX, 1, cv::Scalar(0, 150, 0));
         cv::imshow(demo_wnd, frame);
 
         pressed_key = cv::waitKey(30);
@@ -51,7 +57,7 @@ int demo_feature_descriptor(int argc, char* argv[])
             file << detector_a->getDefaultName() << descriptors;
 
             detector_b->compute(frame, corners, descriptors);
-            file << "detector_b" << descriptors;
+            file << "KAZE" << descriptors;
 
             std::cout << "Dump descriptors complete! \n";
         }
