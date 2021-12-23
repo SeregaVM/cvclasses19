@@ -101,14 +101,15 @@ void corner_detector_fast::create_pattern_pairs()
             pattern_pairs.emplace_back(all_point[i], all_point[j]); 
 }
 
-float corner_detector_fast::calc_mean_area(cv::Point2i point)
+float corner_detector_fast::calc_mean_area(cv::Point2i point, cv::Point2i cur_point)
 {
     float ret = 0, coef = 1.0/(mean_area_size*mean_area_size);
-
+    cv::Mat kern = cv::getGaussianKernel(mean_area_size, mean_area_size/12., CV_32F);
     int center = mean_area_size/2;
+    cv::Point2i point_ref = cur_point + point;
     for(int i = 0; i < mean_area_size; i++)
         for(int j = 0; j < mean_area_size; j++)
-            ret += static_cast<float>(img.at<int16_t>(point.y + (i - center), point.x  + (j - center))) * coef;
+            ret += static_cast<float>(img.at<int16_t>(point_ref.y + (i - center), point_ref.x  + (j - center))) * kern.at<float>(i,j) ;
     return ret;
 }
 
@@ -120,25 +121,55 @@ void corner_detector_fast::compute(cv::InputArray image, std::vector<cv::KeyPoin
     cv::GaussianBlur(img, img, cv::Size(3,3), 0.1, 0.1);
     img.convertTo(img, CV_16SC1);
 
-    descriptors.create(static_cast<int>(keypoints.size()), num_pairs, CV_8U);
+    std::vector<cv::KeyPoint> _keypoints;
+    for(const auto& p: keypoints)
+    {
+        if(p.pt.x < griid_size/2*mean_area_size || p.pt.x > (img.cols - griid_size/2*mean_area_size) ||
+           p.pt.y < griid_size/2*mean_area_size || p.pt.y > (img.rows - griid_size/2*mean_area_size))
+           continue;
+        _keypoints.push_back(p);
+    }
+    keypoints.clear();
+    keypoints = _keypoints;
+
+   descriptors.create(static_cast<int>(keypoints.size()), num_pairs,  CV_32S);
     auto desc_mat = descriptors.getMat();
     desc_mat.setTo(0);
 
     float mean1 = 0, mean2 = 0;
-    uint8_t* ptr = reinterpret_cast<uint8_t*>(desc_mat.ptr());
-    for (const auto& pt : keypoints)
+    int* ptr = reinterpret_cast<int*>(desc_mat.ptr());
+    //for (const auto& pt : keypoints)
+    for(int j =0; j < keypoints.size(); j++ )
     {
         for (int i = 0; i < num_pairs; ++i)
         {
-            mean1 = calc_mean_area(pattern_pairs[i].first);
-            mean2 = calc_mean_area(pattern_pairs[i].second);
+            mean1 = calc_mean_area(pattern_pairs[i].first, keypoints[j].pt);
+            mean2 = calc_mean_area(pattern_pairs[i].second, keypoints[j].pt);
+            //if(mean1 > mean2)
+            //    *ptr = static_cast<int>(100);
+            //else 
+            //    *ptr = static_cast<int>(1);
+            //++ptr;
             if(mean1 > mean2)
-                *ptr = 1;
-            else 
-                *ptr = 0;
-            ++ptr;
+                desc_mat.at<int>(j,i) = 1;
+            else
+                desc_mat.at<int>(j,i) = 0;
         }
     }
+     /*   int desc_length = 32;
+            descriptors.create(static_cast<int>(keypoints.size()), desc_length, CV_32S);
+        auto desc_mat = descriptors.getMat();
+        desc_mat.setTo(0);
+    
+        int* ptr = reinterpret_cast<int*>(desc_mat.ptr());
+        for (const auto& pt : keypoints)
+        {
+            for (int i = 0; i < desc_length; ++i)
+            {
+            *ptr = std::rand();
+                ++ptr;
+            }
+        }*/
 }
 
 void corner_detector_fast::detectAndCompute(cv::InputArray, cv::InputArray, std::vector<cv::KeyPoint>&, cv::OutputArray descriptors, bool /*= false*/)

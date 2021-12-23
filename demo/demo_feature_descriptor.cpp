@@ -21,6 +21,9 @@ int demo_feature_descriptor(int argc, char* argv[])
     cv::namedWindow(main_wnd);
     cv::namedWindow(demo_wnd);
 
+    int thr = 50;
+    cv::createTrackbar("thr", demo_wnd, &thr, 150);
+
 	std::ostringstream convert;
 
     cv::Mat frame;
@@ -36,6 +39,7 @@ int demo_feature_descriptor(int argc, char* argv[])
         cap >> frame;
         cv::imshow(main_wnd, frame);
 
+        detector_a->setThreshold(thr);
         detector_a->detect(frame, corners); // \todo use your detector (detector_b)
         //std::cout << corners[0].angle << " " << corners[0].class_id << " " << corners[0].octave << " " << corners[0].response << " " << corners[0].size << std::endl;
         cv::drawKeypoints(frame, corners, frame, cv::Scalar(0, 0, 255));
